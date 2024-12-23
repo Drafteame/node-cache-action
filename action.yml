@@ -1,0 +1,52 @@
+name: Golang with cache
+author: Draftea
+description: Setup requested Golang version with managed modules caching.
+
+inputs:
+  go-version:
+    description: Desired Golang version.
+    default:
+  go-version-file:
+  description: Path to go.mod file, will determine Golang version. Use in place of `go-version` input.
+  default:
+  cache-key-suffix:
+    description: Optional cache key suffix.
+    default:
+
+outputs:
+  build-cache-path:
+    description: Golang build cache path.
+    value: ${{ steps.golang-env.outputs.build-cache-path }}
+  module-cache-path:
+    description: Golang module cache path.
+    value: ${{ steps.golang-env.outputs.module-cache-path }}
+  cache-key:
+    description: Cache key holding Golang build and module cache paths.
+    value: ${{ steps.golang-env.outputs.cache-key }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Golang
+      uses: useblacksmith/setup-go@v6
+      with:
+        cache: false
+        go-version: ${{ inputs.go-version }}
+    - name: Determine Golang cache paths and construct cache key
+      id: golang-env
+      run: |
+        echo "build-cache-path=$(go env GOCACHE)" >>"$GITHUB_OUTPUT"
+        echo "module-cache-path=$(go env GOMODCACHE)" >>"$GITHUB_OUTPUT"
+        cacheKeyRoot="${{ runner.os }}-golang${{ inputs.cache-key-suffix && format('-{0}',inputs.cache-key-suffix) }}-"
+        echo "cache-key-restore=$cacheKeyRoot" >>"$GITHUB_OUTPUT"
+        echo "cache-key=${cacheKeyRoot}${{ hashFiles('**/go.sum') }}" >>"$GITHUB_OUTPUT"
+      shell: bash
+    - name: Setup Golang cache
+      uses: useblacksmith/cache@v5
+      with:
+        path: |
+          ${{ steps.golang-env.outputs.build-cache-path }}
+          ${{ steps.golang-env.outputs.module-cache-path }}
+        key: ${{ steps.golang-env.outputs.cache-key }}
+        restore-keys: |
+          ${{ steps.golang-env.outputs.cache-key-restore }}
